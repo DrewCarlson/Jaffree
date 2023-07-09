@@ -44,6 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ProcessHandler<T> {
     private final Path executable;
     private final String contextName;
+    private StdWriter stdInWriter = null;
     private StdReader<T> stdOutReader = new GobblingStdReader<>();
     private StdReader<T> stdErrReader = new GobblingStdReader<>();
     private List<ProcessHelper> helpers = null;
@@ -62,6 +63,17 @@ public class ProcessHandler<T> {
     public ProcessHandler(final Path executable, final String contextName) {
         this.executable = executable;
         this.contextName = contextName;
+    }
+
+    /**
+     * Sets stdin writer.
+     *
+     * @param stdInWriter stdin writer
+     * @return this
+     */
+    public synchronized ProcessHandler<T> setStdInWriter(final StdWriter stdInWriter) {
+        this.stdInWriter = stdInWriter;
+        return this;
     }
 
     /**
@@ -157,6 +169,7 @@ public class ProcessHandler<T> {
                     closeQuietly(process.getInputStream());
                     closeQuietly(process.getOutputStream());
                     closeQuietly(process.getErrorStream());
+                    stdInWriter.close();
                 }
             }
         } finally {
@@ -228,6 +241,15 @@ public class ProcessHandler<T> {
         Executor executor = new Executor(contextName);
 
         LOGGER.debug("Starting IO interaction with process");
+
+        if (stdInWriter != null) {
+            executor.execute("StdIn", new Runnable() {
+                @Override
+                public void run() {
+                    stdInWriter.opened(process.getOutputStream());
+                }
+            });
+        }
 
         if (stdErrReader != null) {
             executor.execute("StdErr", new Runnable() {

@@ -20,10 +20,13 @@ package com.github.kokorin.jaffree.ffmpeg;
 import com.github.kokorin.jaffree.LogLevel;
 import com.github.kokorin.jaffree.StreamType;
 import com.github.kokorin.jaffree.net.NegotiatingTcpServer;
+import com.github.kokorin.jaffree.process.CommandSender;
+import com.github.kokorin.jaffree.process.CommandSenderStdWriter;
 import com.github.kokorin.jaffree.process.LoggingStdReader;
 import com.github.kokorin.jaffree.process.ProcessHandler;
 import com.github.kokorin.jaffree.process.ProcessHelper;
 import com.github.kokorin.jaffree.process.StdReader;
+import com.github.kokorin.jaffree.process.StdWriter;
 import com.github.kokorin.jaffree.process.Stopper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -395,7 +398,21 @@ public class FFmpeg {
      * @return ffmpeg result
      */
     public FFmpegResult execute() {
-        return createProcessHandler()
+        return createProcessHandler(null)
+                .setStopper(createStopper())
+                .execute();
+    }
+
+    /**
+     * Starts synchronous ffmpeg execution.
+     * <p>
+     * Current thread is blocked until ffmpeg is finished.
+     *
+     * @param commandSender CommandSender for writing to stdin
+     * @return ffmpeg result
+     */
+    public FFmpegResult execute(final CommandSender commandSender) {
+        return createProcessHandler(commandSender)
                 .setStopper(createStopper())
                 .execute();
     }
@@ -417,13 +434,32 @@ public class FFmpeg {
     }
 
     /**
-     * Starts asynchronous ffmpeg execution, executed using the supplied Executor.
+     * Starts asynchronous ffmpeg execution.
      *
-     * @param executor the executor to use for asynchronous execution
+     * @param commandSender CommandSender for writing to stdin
      * @return ffmpeg result future
      */
-    public FFmpegResultFuture executeAsync(final Executor executor) {
-        final ProcessHandler<FFmpegResult> processHandler = createProcessHandler();
+    public FFmpegResultFuture executeAsync(final CommandSender commandSender) {
+        return executeAsync(new Executor() {
+            @Override
+            public void execute(final Runnable command) {
+                Thread runner = new Thread(command, "FFmpeg-async-runner");
+                runner.setDaemon(true);
+                runner.start();
+            }
+        }, commandSender);
+    }
+
+    /**
+     * Starts asynchronous ffmpeg execution, executed using the supplied Executor.
+     *
+     * @param executor      the executor to use for asynchronous execution
+     * @param commandSender CommandSender for writing to stdin
+     * @return ffmpeg result future
+     */
+    public FFmpegResultFuture executeAsync(final Executor executor,
+                                           final CommandSender commandSender) {
+        final ProcessHandler<FFmpegResult> processHandler = createProcessHandler(commandSender);
         Stopper stopper = createStopper();
         processHandler.setStopper(stopper);
 
@@ -454,12 +490,23 @@ public class FFmpeg {
     }
 
     /**
+     * Starts asynchronous ffmpeg execution, executed using the supplied Executor.
+     *
+     * @param executor the executor to use for asynchronous execution
+     * @return ffmpeg result future
+     */
+    public FFmpegResultFuture executeAsync(final Executor executor) {
+        return executeAsync(executor, null);
+    }
+
+    /**
      * Creates {@link ProcessHandler} which executes ffmpeg command and starts specified
      * {@link ProcessHelper ProcessHelpers}.
      *
+     * @param commandSender CommandSender for writing to stdin
      * @return ProcessHandler
      */
-    protected ProcessHandler<FFmpegResult> createProcessHandler() {
+    protected ProcessHandler<FFmpegResult> createProcessHandler(final CommandSender commandSender) {
         List<ProcessHelper> helpers = new ArrayList<>();
 
         for (Input input : inputs) {
@@ -480,7 +527,15 @@ public class FFmpeg {
             helpers.add(progressHelper);
         }
 
+        final StdWriter stdWriter;
+        if (commandSender == null) {
+            stdWriter = null;
+        } else {
+            stdWriter = new CommandSenderStdWriter(commandSender);
+        }
+
         return new ProcessHandler<FFmpegResult>(executable, contextName)
+                .setStdInWriter(stdWriter)
                 .setStdErrReader(createStdErrReader(outputListener))
                 .setStdOutReader(createStdOutReader())
                 .setHelpers(helpers)
