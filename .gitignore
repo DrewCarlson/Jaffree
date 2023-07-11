@@ -4,3 +4,5 @@ target
 .artifacts
 dependency-reduced-pom.xml
 .git-versioned-pom.xml
+build
+.gradle
