@@ -8,6 +8,11 @@ It integrates with ffmpeg via `java.lang.Process`.
 
 Inspired by [ffmpeg-cli-wrapper](https://github.com/bramp/ffmpeg-cli-wrapper)
 
+This fork adds:
+
+- `CommandSender` api for sending input to the ffmpeg process, useful for ffmpeg forks that support pause/resume.
+- Gradle project infrastructure to simplify publishing or included builds.
+
 ## Tested with the help of [GitHub Actions](https://github.com/kokorin/Jaffree/blob/master/.github/workflows/tests.yml) 
 
 ![Tests](https://github.com/kokorin/Jaffree/workflows/Tests/badge.svg)
